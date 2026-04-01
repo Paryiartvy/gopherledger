@@ -23,3 +23,5 @@ func GenerateToken(userID int64) (string, error) {
 func ValidateToken(token string) (int64, error) {
 	panic("не реализовано")
 }
+
+//TODO: в сервисе заменить локальную функцию генерации токена  на отсюда
