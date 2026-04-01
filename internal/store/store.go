@@ -14,6 +14,8 @@ import (
 // Store хранит все данные приложения в памяти.
 // Добавьте средства защиты конкурентного доступа самостоятельно.
 type Store struct {
+	// ordersMu -> balanceMu -> userMu
+
 	userMu sync.RWMutex
 	// users хранит пользователей по их ID
 	users map[int64]*domain.User
@@ -85,6 +87,11 @@ func (s *Store) GetUserByLogin(login string) (*domain.User, error) {
 // Возвращает domain.ErrOrderOwnedByUser если этот пользователь уже загружал этот номер.
 // Возвращает domain.ErrOrderExists если номер принадлежит другому пользователю.
 func (s *Store) CreateOrder(userID int64, number string) (*domain.Order, error) {
+	s.userMu.Lock()
+	nextID := s.nextID
+	s.nextID += 1
+	s.userMu.Unlock()
+
 	s.ordersMu.Lock()
 	defer s.ordersMu.Unlock()
 
@@ -96,11 +103,8 @@ func (s *Store) CreateOrder(userID int64, number string) (*domain.Order, error) 
 		return &domain.Order{}, fmt.Errorf("order create error: %w", domain.ErrOrderExists)
 	}
 
-	s.userMu.Lock()
-	defer s.userMu.Unlock()
-
 	order := domain.Order{
-		ID:         s.nextID,
+		ID:         nextID,
 		UserID:     userID,
 		Number:     number,
 		Status:     domain.OrderStatusNew,
@@ -108,7 +112,6 @@ func (s *Store) CreateOrder(userID int64, number string) (*domain.Order, error) 
 		UploadedAt: time.Now(),
 	}
 	s.orders[number] = &order
-	s.nextID += 1
 	return &order, nil
 }
 
@@ -178,17 +181,68 @@ func (s *Store) UpdateOrderStatus(number, status string, accrual float64) error 
 
 // GetBalance возвращает баланс пользователя.
 func (s *Store) GetBalance(userID int64) (domain.Balance, error) {
-	panic("не реализовано")
+	s.balanceMu.RLock()
+	defer s.balanceMu.RUnlock()
+
+	balance, ok := s.balances[userID]
+
+	if !ok {
+		return domain.Balance{Current: 0, Withdrawn: 0}, nil
+	}
+	return *balance, nil
 }
 
 // Withdraw списывает сумму с баланса и записывает операцию.
 // Возвращает domain.ErrInsufficientFunds если баланса не хватает.
 // Обе операции должны быть атомарны: либо обе успешны, либо ни одна.
 func (s *Store) Withdraw(userID int64, orderNumber string, sum float64) error {
-	panic("не реализовано")
+	s.userMu.Lock()
+	nextID := s.nextID
+	s.nextID += 1
+	s.userMu.Unlock()
+
+	s.balanceMu.Lock()
+	defer s.balanceMu.Unlock()
+
+	balance, ok := s.balances[userID]
+
+	if !ok {
+		balance = &domain.Balance{Current: 0, Withdrawn: 0}
+	}
+
+	if balance.Current < sum {
+		return fmt.Errorf("ошибка при списании: %w", domain.ErrInsufficientFunds)
+	}
+
+	balance.Current -= sum
+	balance.Withdrawn += sum
+	s.balances[userID] = balance
+	withdrawal := domain.Withdrawal{
+		ID:          nextID,
+		UserID:      userID,
+		OrderNumber: orderNumber,
+		Sum:         sum,
+		ProcessedAt: time.Now(),
+	}
+	s.withdrawals[userID] = append(s.withdrawals[userID], &withdrawal)
+
+	return nil
 }
 
 // GetWithdrawals возвращает историю списаний пользователя, сначала новые.
 func (s *Store) GetWithdrawals(userID int64) ([]domain.Withdrawal, error) {
-	panic("не реализовано")
+	withdrawals := make([]domain.Withdrawal, 0)
+
+	s.balanceMu.RLock()
+	defer s.balanceMu.RUnlock()
+
+	for _, withdrawal := range s.withdrawals[userID] {
+		withdrawals = append(withdrawals, *withdrawal)
+	}
+
+	slices.SortFunc(withdrawals, func(a, b domain.Withdrawal) int {
+		return b.ProcessedAt.Compare(a.ProcessedAt)
+	})
+
+	return withdrawals, nil
 }
