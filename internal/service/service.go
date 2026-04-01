@@ -62,6 +62,10 @@ func hash(item string) string {
 	return hex.EncodeToString(hashBytes)
 }
 
+func getToken(ID int64) string {
+	return strconv.FormatInt(ID, 10) + "_token_" + strconv.Itoa(rand.Intn(100000))
+}
+
 // RegisterUser регистрирует нового пользователя и возвращает токен аутентификации.
 // Хешируйте пароль перед сохранением с помощью crypto/sha256.
 func (s *Service) RegisterUser(login, password string) (string, error) {
@@ -73,45 +77,97 @@ func (s *Service) RegisterUser(login, password string) (string, error) {
 		return "", err
 	}
 	//TODO: сделать норм токен?
-	token := strconv.FormatInt(user.ID, 10) + "_token_" + strconv.Itoa(rand.Intn(100000))
+	token := getToken(user.ID)
 
 	return token, nil
 }
 
 // LoginUser проверяет учётные данные и возвращает токен аутентификации.
 func (s *Service) LoginUser(login, password string) (string, error) {
-	panic("не реализовано")
+	user, err := s.repo.GetUserByLogin(login)
+	if err != nil {
+		return "", err
+	}
+	passwordHash := hash(password)
+	if passwordHash == user.PasswordHash {
+		return getToken(user.ID), nil
+	}
+	return "", domain.ErrInvalidPassword
 }
 
 // CreateOrder проверяет номер заказа по алгоритму Луна и сохраняет заказ.
 func (s *Service) CreateOrder(userID int64, number string) (*domain.Order, error) {
-	panic("не реализовано")
+	isCorrect := validateLuhn(number)
+	if !isCorrect {
+		return &domain.Order{}, domain.ErrInvalidOrder
+	}
+
+	order, err := s.repo.CreateOrder(userID, number)
+	if err != nil {
+		return &domain.Order{}, err
+	}
+
+	return order, nil
 }
 
 // GetUserOrders возвращает все заказы пользователя.
 func (s *Service) GetUserOrders(userID int64) ([]domain.Order, error) {
-	panic("не реализовано")
+	orders, err := s.repo.GetUserOrders(userID)
+	if err != nil {
+		return make([]domain.Order, 0), err
+	}
+	return orders, nil
 }
 
 // GetBalance возвращает текущий баланс пользователя.
 func (s *Service) GetBalance(userID int64) (domain.Balance, error) {
-	panic("не реализовано")
+	balance, err := s.repo.GetBalance(userID)
+	if err != nil {
+		return domain.Balance{}, err
+	}
+
+	return balance, nil
 }
 
 // Withdraw проверяет номер заказа по алгоритму Луна и списывает сумму с баланса.
 func (s *Service) Withdraw(userID int64, orderNumber string, sum float64) error {
-	panic("не реализовано")
+	isCorrect := validateLuhn(orderNumber)
+	if !isCorrect {
+		return domain.ErrInvalidOrder
+	}
+
+	err := s.repo.Withdraw(userID, orderNumber, sum)
+	return err
 }
 
 // GetWithdrawals возвращает историю списаний пользователя.
 func (s *Service) GetWithdrawals(userID int64) ([]domain.Withdrawal, error) {
-	panic("не реализовано")
+	withdrawals, err := s.repo.GetWithdrawals(userID)
+	if err != nil {
+		return make([]domain.Withdrawal, 0), err
+	}
+
+	return withdrawals, nil
 }
 
 // validateLuhn проверяет контрольную сумму номера заказа по алгоритму Луна.
 // Вызывается при загрузке заказа и при списании баллов.
 func validateLuhn(number string) bool {
-	panic("не реализовано")
+	sum := 0
+
+	for i, j := len(number)-1, 1; i >= 0; i, j = i-1, j+1 {
+		if j%2 == 0 {
+			num := int(number[i]-'0') * 2
+			if num > 9 {
+				num -= 9
+			}
+			sum += num
+		} else {
+			num := int(number[i] - '0')
+			sum += num
+		}
+	}
+	return sum%10 == 0
 }
 
 // ---------------------------------------------------------------------------
