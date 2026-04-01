@@ -6,7 +6,6 @@ package service
 
 import (
 	"context"
-	"crypto"
 	"crypto/sha256"
 	"encoding/hex"
 	"log"
@@ -200,13 +199,39 @@ func (s *Service) StartAccrualWorker(ctx context.Context) {
 // processAllPendingOrders получает заказы для обработки и запускает горутины.
 // Реализуйте самостоятельно.
 func (s *Service) processAllPendingOrders(ctx context.Context) {
-	// TODO: замените interface{} на свой интерфейс и раскомментируйте
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(5)
 
-	// TODO: итерируйтесь по заказам, пропускайте те что уже в обработке,
-	// для остальных запускайте s.processOrder через g.Go
+	orders, err := s.repo.GetOrdersForProcessing()
+
+	if err != nil {
+		log.Printf("ошибка получения заказов: %v", err)
+		return
+	}
+
+	for _, order := range orders {
+		s.ordersMu.Lock()
+		if s.processingOrders[order.Number] {
+			s.ordersMu.Unlock()
+			continue
+		}
+
+		s.processingOrders[order.Number] = true
+		s.ordersMu.Unlock()
+
+		err = s.repo.UpdateOrderStatus(order.Number, domain.OrderStatusProcessing, 0)
+		if err != nil {
+			log.Printf("%v", err)
+		}
+
+		number := order.Number
+		g.Go(func() error {
+			s.processOrder(gctx, number)
+			return nil
+		})
+
+	}
 
 	if err := g.Wait(); err != nil {
 		log.Printf("воркер: ошибка группы: %v", err)
@@ -216,7 +241,36 @@ func (s *Service) processAllPendingOrders(ctx context.Context) {
 // processOrder обрабатывает один заказ. Реализуйте самостоятельно.
 // Используйте вспомогательные функции ниже для генерации случайных значений.
 func (s *Service) processOrder(ctx context.Context, number string) {
-	panic("не реализовано")
+	defer func() {
+		s.ordersMu.Lock()
+		delete(s.processingOrders, number)
+		s.ordersMu.Unlock()
+	}()
+
+	delay := randomDelay()
+
+	select {
+	case <-time.After(delay):
+	case <-ctx.Done():
+		return
+	}
+
+	invalid := isInvalid()
+	if invalid {
+		err := s.repo.UpdateOrderStatus(number, domain.OrderStatusInvalid, 0)
+		if err != nil {
+			log.Printf("%v", err)
+		}
+
+		return
+	}
+
+	err := s.repo.UpdateOrderStatus(number, domain.OrderStatusProcessed, randomAccrual())
+	if err != nil {
+		log.Printf("%v", err)
+	}
+
+	return
 }
 
 // ---------------------------------------------------------------------------
