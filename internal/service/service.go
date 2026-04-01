@@ -6,11 +6,31 @@ package service
 
 import (
 	"context"
+	"crypto"
+	"crypto/sha256"
+	"encoding/hex"
+	"log"
 	"math/rand"
+	"strconv"
+	"sync"
 	"time"
 
 	"gopherledger/internal/domain"
+
+	"golang.org/x/sync/errgroup"
 )
+
+type Repository interface {
+	CreateUser(login, passwordHash string) (*domain.User, error)
+	GetUserByLogin(login string) (*domain.User, error)
+	CreateOrder(userID int64, number string) (*domain.Order, error)
+	GetUserOrders(userID int64) ([]domain.Order, error)
+	GetOrdersForProcessing() ([]domain.Order, error)
+	UpdateOrderStatus(number, status string, accrual float64) error
+	GetBalance(userID int64) (domain.Balance, error)
+	Withdraw(userID int64, orderNumber string, sum float64) error
+	GetWithdrawals(userID int64) ([]domain.Withdrawal, error)
+}
 
 // Service реализует бизнес-логику приложения.
 // Замените поле repo в структуре на свой интерфейс.
@@ -18,12 +38,14 @@ import (
 // processingOrders хранит номера заказов, которые сейчас обрабатываются воркером.
 // Защитите конкурентный доступ к этому полю самостоятельно.
 type Service struct {
-	repo             interface{} // замените на свой интерфейс в структуре
+	repo Repository // замените на свой интерфейс в структуре
+
+	ordersMu         sync.RWMutex
 	processingOrders map[string]bool
 }
 
 // New создаёт Service.
-func New(repo interface{}) *Service {
+func New(repo Repository) *Service {
 	return &Service{
 		repo:             repo,
 		processingOrders: make(map[string]bool),
@@ -33,11 +55,27 @@ func New(repo interface{}) *Service {
 // ---------------------------------------------------------------------------
 // Методы бизнес-логики - реализуйте самостоятельно
 // ---------------------------------------------------------------------------
+func hash(item string) string {
+	h := sha256.New()
+	h.Write([]byte(item))
+	hashBytes := h.Sum(nil)
+	return hex.EncodeToString(hashBytes)
+}
 
 // RegisterUser регистрирует нового пользователя и возвращает токен аутентификации.
 // Хешируйте пароль перед сохранением с помощью crypto/sha256.
 func (s *Service) RegisterUser(login, password string) (string, error) {
-	panic("не реализовано")
+	passwordHash := hash(password)
+
+	user, err := s.repo.CreateUser(login, passwordHash)
+
+	if err != nil {
+		return "", err
+	}
+	//TODO: сделать норм токен?
+	token := strconv.FormatInt(user.ID, 10) + "_token_" + strconv.Itoa(rand.Intn(100000))
+
+	return token, nil
 }
 
 // LoginUser проверяет учётные данные и возвращает токен аутентификации.
@@ -118,8 +156,6 @@ func (s *Service) processAllPendingOrders(ctx context.Context) {
 		log.Printf("воркер: ошибка группы: %v", err)
 	}
 }
-
-
 
 // processOrder обрабатывает один заказ. Реализуйте самостоятельно.
 // Используйте вспомогательные функции ниже для генерации случайных значений.
