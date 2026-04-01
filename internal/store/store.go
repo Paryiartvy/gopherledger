@@ -91,9 +91,9 @@ func (s *Store) CreateOrder(userID int64, number string) (*domain.Order, error) 
 	if order, ok := s.orders[number]; ok {
 		if order.UserID == userID {
 			return &domain.Order{}, fmt.Errorf("order create error: %w", domain.ErrOrderOwnedByUser)
-		} else {
-			return &domain.Order{}, fmt.Errorf("order create error: %w", domain.ErrOrderExists)
 		}
+
+		return &domain.Order{}, fmt.Errorf("order create error: %w", domain.ErrOrderExists)
 	}
 
 	s.userMu.Lock()
@@ -151,7 +151,29 @@ func (s *Store) GetOrdersForProcessing() ([]domain.Order, error) {
 // UpdateOrderStatus обновляет статус и начисление заказа.
 // Если статус PROCESSED и accrual > 0, баланс пользователя пополняется.
 func (s *Store) UpdateOrderStatus(number, status string, accrual float64) error {
-	panic("не реализовано")
+	s.ordersMu.Lock()
+	order, ok := s.orders[number]
+
+	if !ok {
+		s.ordersMu.Unlock()
+		return fmt.Errorf("ошибка при обновлении заказа: %w", domain.ErrInvalidOrder)
+	}
+	userID := order.UserID
+	order.Status = status
+	order.Accrual = accrual
+	s.ordersMu.Unlock()
+
+	if status == domain.OrderStatusProcessed && accrual > 0 {
+		s.balanceMu.Lock()
+		defer s.balanceMu.Unlock()
+
+		if balance, ok := s.balances[userID]; ok {
+			balance.Current += accrual
+		} else {
+			s.balances[userID] = &domain.Balance{Current: accrual, Withdrawn: 0.}
+		}
+	}
+	return nil
 }
 
 // GetBalance возвращает баланс пользователя.
