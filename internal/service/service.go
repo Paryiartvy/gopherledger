@@ -8,9 +8,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"gopherledger/internal/auth"
 	"log"
 	"math/rand"
-	"strconv"
 	"sync"
 	"time"
 
@@ -61,10 +62,6 @@ func hash(item string) string {
 	return hex.EncodeToString(hashBytes)
 }
 
-func getToken(ID int64) string {
-	return strconv.FormatInt(ID, 10) + "_token_" + strconv.Itoa(rand.Intn(100000))
-}
-
 // RegisterUser регистрирует нового пользователя и возвращает токен аутентификации.
 // Хешируйте пароль перед сохранением с помощью crypto/sha256.
 func (s *Service) RegisterUser(login, password string) (string, error) {
@@ -75,9 +72,11 @@ func (s *Service) RegisterUser(login, password string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	//TODO: сделать норм токен?
-	token := getToken(user.ID)
 
+	token, err := auth.GenerateToken(user.ID)
+	if err != nil {
+		return "", fmt.Errorf("ошибка генерации токена при регистрации: %w", err)
+	}
 	return token, nil
 }
 
@@ -89,7 +88,11 @@ func (s *Service) LoginUser(login, password string) (string, error) {
 	}
 	passwordHash := hash(password)
 	if passwordHash == user.PasswordHash {
-		return getToken(user.ID), nil
+		token, err := auth.GenerateToken(user.ID)
+		if err != nil {
+			return "", fmt.Errorf("ошибка генерации токена при аутентификации: %w", err)
+		}
+		return token, nil
 	}
 	return "", domain.ErrInvalidPassword
 }
