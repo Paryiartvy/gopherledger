@@ -10,6 +10,15 @@
 //  7. Реализовать graceful shutdown по сигналам SIGINT и SIGTERM
 package main
 
+import (
+	"gopherledger/internal/config"
+	"log"
+)
+
 func main() {
-	panic("не реализовано")
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalln(err)
+	}
+	config.GlobalConfig = cfg
 }

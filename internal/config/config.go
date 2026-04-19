@@ -19,6 +19,8 @@ type Config struct {
 	Workers                int    `yaml:"worker_concurrency"`
 }
 
+var GlobalConfig *Config
+
 // Load читает конфигурацию из файла config.yaml.
 // Если файл не найден или поле не задано, применяются значения по умолчанию.
 func Load() (*Config, error) {

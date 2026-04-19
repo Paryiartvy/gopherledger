@@ -3,7 +3,13 @@
 package middleware
 
 import (
+	"context"
+	"gopherledger/internal/auth"
+	"gopherledger/internal/config"
+	"gopherledger/internal/handler"
+	"log"
 	"net/http"
+	"time"
 )
 
 // Auth проверяет токен из заголовка Authorization и помещает ID пользователя в контекст.
@@ -16,7 +22,14 @@ import (
 //   - передать управление следующему handler или вернуть 401
 func Auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// реализуйте самостоятельно
+		token := r.Header.Get("Authorization")
+		id, err := auth.ValidateToken(token)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+		ctx := context.WithValue(r.Context(), handler.CtxKeyUserID, id)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
@@ -27,6 +40,11 @@ type statusRecorder struct {
 	status int
 }
 
+func (s *statusRecorder) WriteHeader(statusCode int) {
+	s.status = statusCode
+	s.ResponseWriter.WriteHeader(statusCode)
+}
+
 // Logging логирует метод, путь, статус ответа и время выполнения каждого запроса.
 //
 // Что нужно сделать:
@@ -35,7 +53,16 @@ type statusRecorder struct {
 //   - после выполнения handler записать лог
 func Logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// реализуйте самостоятельно
+		start := time.Now()
+		log.Printf("=> начало запроса: %v", start)
+		responseWithStatus := statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(&responseWithStatus, r)
+		switch config.GlobalConfig.LogLevel {
+		case "debug":
+			log.Printf("<= %s %s %d %v: %s %s", r.Method, r.URL.Path, responseWithStatus.status, time.Since(start), r.RemoteAddr, r.Host)
+		default:
+			log.Printf("<= %s %s %d %v", r.Method, r.URL.Path, responseWithStatus.status, time.Since(start))
+		}
 	})
 }
 
@@ -47,6 +74,12 @@ func Logging(next http.Handler) http.Handler {
 //   - если паника произошла, залогировать её и отдать 500
 func Recover(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// реализуйте самостоятельно
+		defer func() {
+			if p := recover(); p != nil {
+				log.Printf("паника: %v", p)
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
 	})
 }
