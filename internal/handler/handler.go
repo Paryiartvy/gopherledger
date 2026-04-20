@@ -136,7 +136,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	token, err := h.svc.LoginUser(loginInfo.Login, loginInfo.Password)
 	if err != nil {
-		if errors.Is(err, domain.ErrInvalidPassword) {
+		if errors.Is(err, domain.ErrInvalidPassword) || errors.Is(err, domain.ErrUserNotFound) {
 			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "неверные учетные данные", err)
 		} else {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", err)
