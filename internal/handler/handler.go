@@ -8,24 +8,41 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"gopherledger/internal/domain"
 	"log"
 	"net/http"
 )
 
+type Service interface {
+	RegisterUser(login string, password string) (string, error)
+	LoginUser(login string, password string) (string, error)
+	CreateOrder(userID int64, number string) (*domain.Order, error)
+	GetUserOrders(userID int64) ([]domain.Order, error)
+	GetBalance(userID int64) (domain.Balance, error)
+	Withdraw(userID int64, orderNumber string, sum float64) error
+	GetWithdrawals(userID int64) ([]domain.Withdrawal, error)
+	//StartAccrualWorker(ctx context.Context)
+}
+
 // Handler хранит зависимость от бизнес-логики.
 // Замените interface{} на свой интерфейс.
 type Handler struct {
-	svc interface{}
+	svc Service
 }
 
 // New создаёт Handler.
-func New(svc interface{}) *Handler {
+func New(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
 // ---------------------------------------------------------------------------
 // Вспомогательные функции для ответов - предоставлены
 // ---------------------------------------------------------------------------
+type httpError struct {
+	Code    string `json:"code"`
+	UserMsg string `json:"message"`
+}
 
 // writeError записывает JSON-ответ с ошибкой.
 // Клиент видит только userMsg. Внутренние детали пишутся только в лог.
@@ -36,8 +53,15 @@ func writeError(w http.ResponseWriter, status int, code, userMsg string, interna
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	// TODO: создайте структуру ответа и сериализуйте её
-	_ = json.NewEncoder(w)
+	userError := httpError{
+		Code:    code,
+		UserMsg: userMsg,
+	}
+
+	enc := json.NewEncoder(w)
+	if err := enc.Encode(userError); err != nil {
+		log.Printf("ошибка сериализации: %s", err)
+	}
 }
 
 // writeJSON записывает успешный JSON-ответ.
@@ -52,13 +76,40 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // ---------------------------------------------------------------------------
 // Обработчики - реализуйте самостоятельно
 // ---------------------------------------------------------------------------
+type auth struct {
+	Login    string `json:"login"`
+	Password string `json:"password"`
+}
 
 // Register обрабатывает POST /api/user/register.
 // При успехе: 200 OK, заголовок Authorization с токеном.
 // При дублировании логина: 409 Conflict.
 // При некорректных данных: 400 Bad Request.
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
-	panic("не реализовано")
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			log.Printf("ошибка регистрации: %s", err)
+		}
+	}()
+	registerInfo := auth{}
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&registerInfo); err != nil {
+		writeError(w, http.StatusBadRequest, "400", "Bad Request", err)
+		return
+	}
+	token, err := h.svc.RegisterUser(registerInfo.Login, registerInfo.Password)
+
+	if err != nil {
+		if errors.Is(err, domain.ErrUserExists) {
+			writeError(w, http.StatusConflict, "409", "Conflict", err)
+		} else {
+			writeError(w, http.StatusInternalServerError, "500", "Internal server error", err)
+		}
+		return
+	}
+	w.Header().Set("Authorization", token)
+	w.WriteHeader(http.StatusOK)
 }
 
 // Login обрабатывает POST /api/user/login.
