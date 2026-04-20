@@ -13,7 +13,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"time"
 )
 
 type Service interface {
@@ -192,13 +191,6 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
-type userOrder struct {
-	Number     string    `json:"number"`
-	Status     string    `json:"status"`
-	Accrual    float64   `json:"accrual,omitempty"`
-	UploadedAt time.Time `json:"uploaded_at"`
-}
-
 // GetOrders обрабатывает GET /api/user/orders.
 // 200 OK с JSON-массивом заказов или 204 No Content если заказов нет.
 func (h *Handler) GetOrders(w http.ResponseWriter, r *http.Request) {
@@ -215,31 +207,42 @@ func (h *Handler) GetOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ordersInternal, err := h.svc.GetUserOrders(userId)
+	orders, err := h.svc.GetUserOrders(userId)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", err)
 		return
 	}
 
-	if len(ordersInternal) == 0 {
+	if len(orders) == 0 {
 		w.WriteHeader(http.StatusNoContent)
 	} else {
-		orders := make([]userOrder, 0, len(ordersInternal))
-		for _, v := range ordersInternal {
-			orders = append(orders, userOrder{
-				Number:     v.Number,
-				Status:     v.Status,
-				Accrual:    v.Accrual,
-				UploadedAt: v.UploadedAt,
-			})
-		}
+
 		writeJSON(w, http.StatusOK, orders)
 	}
 }
 
 // GetBalance обрабатывает GET /api/user/balance.
 func (h *Handler) GetBalance(w http.ResponseWriter, r *http.Request) {
-	panic("не реализовано")
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			log.Printf("ошибка при закрытии тела запроса при получении баланса: %s", err)
+		}
+	}()
+
+	userId, ok := UserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", nil)
+		return
+	}
+
+	balance, err := h.svc.GetBalance(userId)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", nil)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, balance)
 }
 
 // Withdraw обрабатывает POST /api/user/balance/withdraw.

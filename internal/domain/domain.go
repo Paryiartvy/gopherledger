@@ -34,18 +34,18 @@ type User struct {
 
 // Order представляет заказ, загруженный пользователем.
 type Order struct {
-	ID         int64
-	UserID     int64
-	Number     string
-	Status     string
-	Accrual    float64
-	UploadedAt time.Time
+	ID         int64     `json:"-"`
+	UserID     int64     `json:"-"`
+	Number     string    `json:"number"`
+	Status     string    `json:"status"`
+	Accrual    float64   `json:"accrual,omitempty"`
+	UploadedAt time.Time `json:"uploaded_at"`
 }
 
 // Balance представляет текущий баланс пользователя.
 type Balance struct {
-	Current   float64
-	Withdrawn float64
+	Current   float64 `json:"current"`
+	Withdrawn float64 `json:"withdrawn"`
 }
 
 // Withdrawal представляет операцию списания баллов.
