@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"gopherledger/internal/domain"
+	"io"
 	"log"
 	"net/http"
 )
@@ -51,13 +52,14 @@ func writeError(w http.ResponseWriter, status int, code, userMsg string, interna
 	if internalErr != nil {
 		log.Printf("ошибка code=%s status=%d: %v", code, status, internalErr)
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
+
 	userError := httpError{
 		Code:    code,
 		UserMsg: userMsg,
 	}
-
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(userError); err != nil {
 		log.Printf("ошибка сериализации: %s", err)
@@ -89,17 +91,18 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		err := r.Body.Close()
 		if err != nil {
-			log.Printf("ошибка чтения тела запроса при регистрации: %s", err)
+			log.Printf("ошибка при закрытии тела запроса при регистрации: %s", err)
 		}
 	}()
+
 	registerInfo := auth{}
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&registerInfo); err != nil {
 		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "неверный формат учетных данных", err)
 		return
 	}
-	token, err := h.svc.RegisterUser(registerInfo.Login, registerInfo.Password)
 
+	token, err := h.svc.RegisterUser(registerInfo.Login, registerInfo.Password)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserExists) {
 			writeError(w, http.StatusConflict, "CONFLICT", "пользователь с таким именем уже существует", err)
@@ -108,6 +111,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
 	w.Header().Set("Authorization", token)
 	w.WriteHeader(http.StatusOK)
 }
@@ -119,17 +123,18 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		err := r.Body.Close()
 		if err != nil {
-			log.Printf("ошибка чтения тела запроса при логине: %s", err)
+			log.Printf("ошибка при закрытии тела запроса при логине: %s", err)
 		}
 	}()
+
 	loginInfo := auth{}
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&loginInfo); err != nil {
 		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "неверный формат учетных данных", err)
 		return
 	}
-	token, err := h.svc.LoginUser(loginInfo.Login, loginInfo.Password)
 
+	token, err := h.svc.LoginUser(loginInfo.Login, loginInfo.Password)
 	if err != nil {
 		if errors.Is(err, domain.ErrInvalidPassword) {
 			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "неверные учетные данные", err)
@@ -138,6 +143,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
 	w.Header().Set("Authorization", token)
 	w.WriteHeader(http.StatusOK)
 }
@@ -149,7 +155,40 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 // 409 Conflict  - заказ принадлежит другому пользователю.
 // 422 Unprocessable Entity - номер не прошёл проверку Луна.
 func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
-	panic("не реализовано")
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			log.Printf("ошибка при закрытии тела запроса при создании заказа: %s", err)
+		}
+	}()
+
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "ошибка при чтении тела запроса при создании заказа", err)
+		return
+	}
+	userId, ok := UserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", err)
+		return
+	}
+
+	number := string(data)
+	_, err = h.svc.CreateOrder(userId, number)
+
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidOrder) {
+			writeError(w, http.StatusUnprocessableEntity, "UNPROCESSABLE_ENTITY", "номер заказа не прошёл проверку Луна", err)
+		} else if errors.Is(err, domain.ErrOrderExists) {
+			writeError(w, http.StatusConflict, "CONFLICT", "заказ принадлежит другому пользователю", err)
+		} else if errors.Is(err, domain.ErrOrderOwnedByUser) {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", err)
+		}
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
 }
 
 // GetOrders обрабатывает GET /api/user/orders.
@@ -204,6 +243,6 @@ const CtxKeyUserID contextKey = "userID"
 // UserIDFromContext извлекает ID аутентифицированного пользователя из контекста.
 // Возвращает 0, false если значение отсутствует.
 func UserIDFromContext(ctx context.Context) (int64, bool) {
-	// реализуйте самостоятельно
-	panic("не реализовано")
+	id, ok := ctx.Value(CtxKeyUserID).(int64)
+	return id, ok
 }
