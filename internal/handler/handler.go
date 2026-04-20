@@ -89,22 +89,22 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		err := r.Body.Close()
 		if err != nil {
-			log.Printf("ошибка регистрации: %s", err)
+			log.Printf("ошибка чтения тела запроса при регистрации: %s", err)
 		}
 	}()
 	registerInfo := auth{}
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&registerInfo); err != nil {
-		writeError(w, http.StatusBadRequest, "400", "Bad Request", err)
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "неверный формат учетных данных", err)
 		return
 	}
 	token, err := h.svc.RegisterUser(registerInfo.Login, registerInfo.Password)
 
 	if err != nil {
 		if errors.Is(err, domain.ErrUserExists) {
-			writeError(w, http.StatusConflict, "409", "Conflict", err)
+			writeError(w, http.StatusConflict, "CONFLICT", "пользователь с таким именем уже существует", err)
 		} else {
-			writeError(w, http.StatusInternalServerError, "500", "Internal server error", err)
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", err)
 		}
 		return
 	}
@@ -116,7 +116,30 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 // При успехе: 200 OK, заголовок Authorization с токеном.
 // При неверных данных: 401 Unauthorized.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
-	panic("не реализовано")
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			log.Printf("ошибка чтения тела запроса при логине: %s", err)
+		}
+	}()
+	loginInfo := auth{}
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&loginInfo); err != nil {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "неверный формат учетных данных", err)
+		return
+	}
+	token, err := h.svc.LoginUser(loginInfo.Login, loginInfo.Password)
+
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidPassword) {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "неверные учетные данные", err)
+		} else {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", err)
+		}
+		return
+	}
+	w.Header().Set("Authorization", token)
+	w.WriteHeader(http.StatusOK)
 }
 
 // CreateOrder обрабатывает POST /api/user/orders.
