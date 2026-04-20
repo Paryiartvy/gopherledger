@@ -245,11 +245,6 @@ func (h *Handler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, balance)
 }
 
-type userWithdraw struct {
-	Order string  `json:"order"`
-	Sum   float64 `json:"sum"`
-}
-
 // Withdraw обрабатывает POST /api/user/balance/withdraw.
 // 200 OK при успехе.
 // 402 Payment Required при нехватке баллов.
@@ -268,14 +263,14 @@ func (h *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	withdraw := userWithdraw{}
+	withdraw := domain.Withdrawal{}
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&withdraw); err != nil {
 		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "неверный формат данных", err)
 		return
 	}
 
-	err := h.svc.Withdraw(userId, withdraw.Order, withdraw.Sum)
+	err := h.svc.Withdraw(userId, withdraw.OrderNumber, withdraw.Sum)
 	if err != nil {
 		if errors.Is(err, domain.ErrInvalidOrder) {
 			writeError(w, http.StatusUnprocessableEntity, "UNPROCESSABLE_ENTITY", "номер заказа не прошёл проверку Луна", err)
@@ -293,7 +288,29 @@ func (h *Handler) Withdraw(w http.ResponseWriter, r *http.Request) {
 // GetWithdrawals обрабатывает GET /api/user/withdrawals.
 // 200 OK с массивом или 204 No Content если списаний нет.
 func (h *Handler) GetWithdrawals(w http.ResponseWriter, r *http.Request) {
-	panic("не реализовано")
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			log.Printf("ошибка при закрытии тела запроса при чтении списаний: %s", err)
+		}
+	}()
+
+	userId, ok := UserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", nil)
+		return
+	}
+
+	withdrawals, err := h.svc.GetWithdrawals(userId)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", err)
+		return
+	}
+	if len(withdrawals) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+	} else {
+		writeJSON(w, http.StatusOK, withdrawals)
+	}
 }
 
 // ExportStats обрабатывает POST /api/stats/export.
