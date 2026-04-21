@@ -30,6 +30,7 @@ type Repository interface {
 	GetBalance(userID int64) (domain.Balance, error)
 	Withdraw(userID int64, orderNumber string, sum float64) error
 	GetWithdrawals(userID int64) ([]domain.Withdrawal, error)
+	GetStats() (*domain.Stat, error)
 }
 
 // Service реализует бизнес-логику приложения.
@@ -150,6 +151,15 @@ func (s *Service) GetWithdrawals(userID int64) ([]domain.Withdrawal, error) {
 	}
 
 	return withdrawals, nil
+}
+
+// GetStats возвращает статистику по всему хранилищу
+func (s *Service) GetStats() (*domain.Stat, error) {
+	stat, err := s.repo.GetStats()
+	if err != nil {
+		return stat, err
+	}
+	return stat, nil
 }
 
 // validateLuhn проверяет контрольную сумму номера заказа по алгоритму Луна.

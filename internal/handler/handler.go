@@ -6,13 +6,16 @@
 package handler
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"gopherledger/internal/domain"
 	"io"
 	"log"
 	"net/http"
+	"os"
 )
 
 type Service interface {
@@ -23,7 +26,7 @@ type Service interface {
 	GetBalance(userID int64) (domain.Balance, error)
 	Withdraw(userID int64, orderNumber string, sum float64) error
 	GetWithdrawals(userID int64) ([]domain.Withdrawal, error)
-	//StartAccrualWorker(ctx context.Context)
+	GetStats() (*domain.Stat, error)
 }
 
 // Handler хранит зависимость от бизнес-логики.
@@ -326,7 +329,45 @@ func (h *Handler) GetWithdrawals(w http.ResponseWriter, r *http.Request) {
 //
 // Для работы с файлами используйте пакет os (неделя 8).
 func (h *Handler) ExportStats(w http.ResponseWriter, r *http.Request) {
-	panic("не реализовано")
+	file, err := os.OpenFile("stats.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", err)
+		return
+	}
+	defer func() {
+		err = file.Close()
+		if err != nil {
+			log.Printf("ошибка при закрытии при импорте статистики: %s", err)
+		}
+	}()
+
+	stat, err := h.svc.GetStats()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", err)
+		return
+	}
+	writer := bufio.NewWriter(file)
+	report := fmt.Sprintf("Total users: %d\n", stat.UserCount)
+	report += fmt.Sprintf("Total orders: %d\n", stat.OrdersCount)
+	report += fmt.Sprintf("\t%s: %d\n", domain.OrderStatusNew, stat.OrdersDistribution.NEW)
+	report += fmt.Sprintf("\t%s: %d\n", domain.OrderStatusProcessing, stat.OrdersDistribution.PROCESSING)
+	report += fmt.Sprintf("\t%s: %d\n", domain.OrderStatusProcessed, stat.OrdersDistribution.PROCESSED)
+	report += fmt.Sprintf("\t%s: %d\n", domain.OrderStatusInvalid, stat.OrdersDistribution.INVALID)
+	report += fmt.Sprintf("Total accrual: %f\n", stat.TotalAccrual)
+	report += fmt.Sprintf("Total withdraw: %f\n", stat.TotalWithdraw)
+	report += fmt.Sprintf("Generated at: %v", stat.GeneratedAt)
+	_, err = writer.WriteString(report)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", err)
+		return
+	}
+	err = writer.Flush()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 // ---------------------------------------------------------------------------

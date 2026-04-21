@@ -246,3 +246,42 @@ func (s *Store) GetWithdrawals(userID int64) ([]domain.Withdrawal, error) {
 
 	return withdrawals, nil
 }
+
+// GetStats возвращает статистику по хранилищу
+func (s *Store) GetStats() (*domain.Stat, error) {
+	// ordersMu -> balanceMu -> userMu
+	stat := &domain.Stat{}
+
+	s.userMu.RLock()
+	stat.UserCount = len(s.users)
+	s.userMu.RUnlock()
+
+	s.ordersMu.RLock()
+	stat.OrdersCount = len(s.orders)
+	for _, v := range s.orders {
+		switch v.Status {
+		case domain.OrderStatusNew:
+			stat.OrdersDistribution.NEW += 1
+		case domain.OrderStatusProcessing:
+			stat.OrdersDistribution.PROCESSING += 1
+		case domain.OrderStatusProcessed:
+			stat.OrdersDistribution.PROCESSED += 1
+		case domain.OrderStatusInvalid:
+			stat.OrdersDistribution.INVALID += 1
+		default:
+			return nil, fmt.Errorf("неизвестный статус у заказа: %s", v.Status)
+		}
+	}
+	s.ordersMu.RUnlock()
+
+	s.balanceMu.RLock()
+	for _, v := range s.balances {
+		stat.TotalAccrual += v.Current + v.Withdrawn
+		stat.TotalWithdraw += v.Withdrawn
+	}
+	s.balanceMu.RUnlock()
+
+	stat.GeneratedAt = time.Now()
+
+	return stat, nil
+}

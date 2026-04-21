@@ -57,6 +57,21 @@ type Withdrawal struct {
 	ProcessedAt time.Time `json:"processed_at,omitempty"`
 }
 
+type ordersDistribution struct {
+	NEW        int `json:"new"`
+	PROCESSING int `json:"processing"`
+	INVALID    int `json:"invalid"`
+	PROCESSED  int `json:"processed"`
+}
+type Stat struct {
+	UserCount          int                `json:"user_count"`
+	OrdersCount        int                `json:"orders_count"`
+	OrdersDistribution ordersDistribution `json:"orders_distribution"`
+	TotalAccrual       float64            `json:"total_accrual"`
+	TotalWithdraw      float64            `json:"total_withdraw"`
+	GeneratedAt        time.Time          `json:"generated_at"`
+}
+
 // ---------------------------------------------------------------------------
 // Константы статусов заказа
 // ---------------------------------------------------------------------------
