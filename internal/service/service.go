@@ -195,8 +195,8 @@ func validateLuhn(number string) bool {
 // StartAccrualWorker запускает фоновый цикл, который каждые 3 секунды
 // передаёт необработанные заказы в processAllPendingOrders.
 // Останавливается при отмене ctx.
-func (s *Service) StartAccrualWorker(ctx context.Context) {
-	ticker := time.NewTicker(3 * time.Second)
+func (s *Service) StartAccrualWorker(ctx context.Context, accrualIntervalSeconds int, workers int) {
+	ticker := time.NewTicker(time.Duration(accrualIntervalSeconds) * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -204,17 +204,17 @@ func (s *Service) StartAccrualWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.processAllPendingOrders(ctx)
+			s.processAllPendingOrders(ctx, workers)
 		}
 	}
 }
 
 // processAllPendingOrders получает заказы для обработки и запускает горутины.
 // Реализуйте самостоятельно.
-func (s *Service) processAllPendingOrders(ctx context.Context) {
+func (s *Service) processAllPendingOrders(ctx context.Context, workers int) {
 
 	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(5)
+	g.SetLimit(workers)
 
 	orders, err := s.repo.GetOrdersForProcessing()
 
