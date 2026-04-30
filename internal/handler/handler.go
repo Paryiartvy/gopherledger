@@ -109,6 +109,8 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, domain.ErrUserExists) {
 			writeError(w, http.StatusConflict, "CONFLICT", "пользователь с таким именем уже существует", err)
+		} else if errors.Is(err, domain.ErrInvalidData) {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "неверный формат учетных данных", err)
 		} else {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error", err)
 		}
