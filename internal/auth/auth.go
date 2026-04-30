@@ -44,3 +44,5 @@ func ValidateToken(token string) (int64, error) {
 	}
 	return id, nil
 }
+
+//TODO: сделать устаревание токенов
