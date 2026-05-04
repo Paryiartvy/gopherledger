@@ -1,7 +1,9 @@
 package service
 
 import (
+	"context"
 	"gopherledger/internal/domain"
+	"os"
 	"testing"
 	"time"
 
@@ -482,28 +484,25 @@ func TestGetWithdrawals(t *testing.T) {
 func TestGetStats(t *testing.T) {
 	tests := []struct {
 		name       string
-		userID     int64
 		mockSetup  func(store *fakeStore)
 		wantErr    bool
 		errType    error
 		wantAssert bool
 	}{
 		{name: "успех",
-			userID: 52,
 			mockSetup: func(s *fakeStore) {
-				s.On("GetWithdrawals", int64(52)).Return([]domain.Withdrawal{{}}, nil)
+				s.On("GetStats").Return(&domain.Stat{}, nil)
 			},
 			wantErr:    false,
 			errType:    nil,
 			wantAssert: true,
 		},
 		{name: "ошибка",
-			userID: 52,
 			mockSetup: func(s *fakeStore) {
-				s.On("GetWithdrawals", int64(52)).Return([]domain.Withdrawal(nil), domain.ErrInvalidData)
+				s.On("GetStats").Return(&domain.Stat{}, os.ErrClosed)
 			},
 			wantErr:    true,
-			errType:    domain.ErrInvalidData,
+			errType:    os.ErrClosed,
 			wantAssert: true,
 		},
 	}
@@ -514,7 +513,7 @@ func TestGetStats(t *testing.T) {
 			tt.mockSetup(mockStore)
 			service := New(mockStore)
 
-			_, err := service.GetWithdrawals(tt.userID)
+			_, err := service.GetStats()
 
 			if tt.wantErr {
 				assert.ErrorIs(t, err, tt.errType)
@@ -528,7 +527,78 @@ func TestGetStats(t *testing.T) {
 	}
 }
 
-//GetStats() (*domain.Stat, error)
+// =========================================
+
+func TestProcessAllPendingOrders(t *testing.T) {
+	tests := []struct {
+		name       string
+		mockSetup  func(store *fakeStore)
+		wantErr    bool
+		errType    error
+		wantAssert bool
+	}{
+		{name: "успех",
+			mockSetup: func(s *fakeStore) {
+				s.On("GetOrdersForProcessing").Return([]domain.Order{}, nil)
+			},
+			wantErr:    false,
+			errType:    nil,
+			wantAssert: true,
+		},
+		{name: "ошибка",
+			mockSetup: func(s *fakeStore) {
+				s.On("GetOrdersForProcessing").Return([]domain.Order{}, os.ErrClosed)
+			},
+			wantErr:    true,
+			errType:    os.ErrClosed,
+			wantAssert: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockStore := new(fakeStore)
+			tt.mockSetup(mockStore)
+			service := New(mockStore)
+
+			service.processAllPendingOrders(context.Background(), 3)
+
+			if tt.wantAssert {
+				mockStore.AssertExpectations(t)
+			}
+		})
+	}
+}
+
+// =========================================
+
+func TestStartAccrualWorker(t *testing.T) {
+	tests := []struct {
+		name              string
+		interval, workers int
+		mockSetup         func(store *fakeStore)
+		wantErr           bool
+		errType           error
+		wantAssert        bool
+	}{
+		{name: "успех",
+			interval: 2,
+			workers:  3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockStore := new(fakeStore)
+			service := New(mockStore)
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			service.StartAccrualWorker(ctx, tt.interval, tt.workers)
+
+		})
+	}
+}
+
 //StartAccrualWorker(ctx context.Context, accrualIntervalSeconds int, workers int)
 //processAllPendingOrders(ctx context.Context, workers int)
 //processOrder(ctx context.Context, number string)
