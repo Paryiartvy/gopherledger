@@ -16,6 +16,7 @@ import (
 
 var mu = sync.RWMutex{}
 var userIDByToken = make(map[string]int64)
+var tokenByUserID = make(map[int64]string)
 
 // ErrInvalidToken возвращается, если токен не найден или недействителен.
 var ErrInvalidToken = errors.New("недействительный токен")
@@ -28,6 +29,8 @@ func GenerateToken(userID int64) (string, error) {
 	mu.Lock()
 	defer mu.Unlock()
 	userIDByToken[token] = userID
+	delete(userIDByToken, tokenByUserID[userID])
+	tokenByUserID[userID] = token
 
 	return token, nil
 }
@@ -42,7 +45,9 @@ func ValidateToken(token string) (int64, error) {
 	if !ok {
 		return 0, ErrInvalidToken
 	}
+	if t, ok := tokenByUserID[id]; ok && t != token {
+		return 0, ErrInvalidToken
+	}
+
 	return id, nil
 }
-
-//TODO: сделать устаревание токенов
