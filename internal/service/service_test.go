@@ -324,9 +324,210 @@ func TestWithdraw(t *testing.T) {
 	}
 }
 
-//GetUserOrders(userID int64) ([]domain.Order, error)
-//GetBalance(userID int64) (domain.Balance, error)
-//GetWithdrawals(userID int64) ([]domain.Withdrawal, error)
+// =========================================
+
+func TestGetUserOrders(t *testing.T) {
+	tests := []struct {
+		name       string
+		userID     int64
+		mockSetup  func(store *fakeStore)
+		wantErr    bool
+		errType    error
+		wantAssert bool
+	}{
+		{name: "успех",
+			userID: 52,
+			mockSetup: func(s *fakeStore) {
+				s.On("GetUserOrders", int64(52)).Return([]domain.Order{{}}, nil)
+			},
+			wantErr:    false,
+			errType:    nil,
+			wantAssert: true,
+		},
+		{name: "ошибка",
+			userID: 52,
+			mockSetup: func(s *fakeStore) {
+				s.On("GetUserOrders", int64(52)).Return([]domain.Order(nil), domain.ErrInvalidData)
+			},
+			wantErr:    true,
+			errType:    domain.ErrInvalidData,
+			wantAssert: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockStore := new(fakeStore)
+			tt.mockSetup(mockStore)
+			service := New(mockStore)
+
+			_, err := service.GetUserOrders(tt.userID)
+
+			if tt.wantErr {
+				assert.ErrorIs(t, err, tt.errType)
+			} else {
+				assert.NoError(t, err)
+			}
+			if tt.wantAssert {
+				mockStore.AssertExpectations(t)
+			}
+		})
+	}
+}
+
+// =========================================
+
+func TestGetBalance(t *testing.T) {
+	tests := []struct {
+		name       string
+		userID     int64
+		mockSetup  func(store *fakeStore)
+		wantErr    bool
+		errType    error
+		wantAssert bool
+	}{
+		{name: "успех",
+			userID: 52,
+			mockSetup: func(s *fakeStore) {
+				s.On("GetBalance", int64(52)).Return(domain.Balance{}, nil)
+			},
+			wantErr:    false,
+			errType:    nil,
+			wantAssert: true,
+		},
+		{name: "ошибка",
+			userID: 52,
+			mockSetup: func(s *fakeStore) {
+				s.On("GetBalance", int64(52)).Return(domain.Balance{}, domain.ErrInvalidData)
+			},
+			wantErr:    true,
+			errType:    domain.ErrInvalidData,
+			wantAssert: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockStore := new(fakeStore)
+			tt.mockSetup(mockStore)
+			service := New(mockStore)
+
+			_, err := service.GetBalance(tt.userID)
+
+			if tt.wantErr {
+				assert.ErrorIs(t, err, tt.errType)
+			} else {
+				assert.NoError(t, err)
+			}
+			if tt.wantAssert {
+				mockStore.AssertExpectations(t)
+			}
+		})
+	}
+}
+
+// =========================================
+
+func TestGetWithdrawals(t *testing.T) {
+	tests := []struct {
+		name       string
+		userID     int64
+		mockSetup  func(store *fakeStore)
+		wantErr    bool
+		errType    error
+		wantAssert bool
+	}{
+		{name: "успех",
+			userID: 52,
+			mockSetup: func(s *fakeStore) {
+				s.On("GetWithdrawals", int64(52)).Return([]domain.Withdrawal{{}}, nil)
+			},
+			wantErr:    false,
+			errType:    nil,
+			wantAssert: true,
+		},
+		{name: "ошибка",
+			userID: 52,
+			mockSetup: func(s *fakeStore) {
+				s.On("GetWithdrawals", int64(52)).Return([]domain.Withdrawal(nil), domain.ErrInvalidData)
+			},
+			wantErr:    true,
+			errType:    domain.ErrInvalidData,
+			wantAssert: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockStore := new(fakeStore)
+			tt.mockSetup(mockStore)
+			service := New(mockStore)
+
+			_, err := service.GetWithdrawals(tt.userID)
+
+			if tt.wantErr {
+				assert.ErrorIs(t, err, tt.errType)
+			} else {
+				assert.NoError(t, err)
+			}
+			if tt.wantAssert {
+				mockStore.AssertExpectations(t)
+			}
+		})
+	}
+}
+
+// =========================================
+
+func TestGetStats(t *testing.T) {
+	tests := []struct {
+		name       string
+		userID     int64
+		mockSetup  func(store *fakeStore)
+		wantErr    bool
+		errType    error
+		wantAssert bool
+	}{
+		{name: "успех",
+			userID: 52,
+			mockSetup: func(s *fakeStore) {
+				s.On("GetWithdrawals", int64(52)).Return([]domain.Withdrawal{{}}, nil)
+			},
+			wantErr:    false,
+			errType:    nil,
+			wantAssert: true,
+		},
+		{name: "ошибка",
+			userID: 52,
+			mockSetup: func(s *fakeStore) {
+				s.On("GetWithdrawals", int64(52)).Return([]domain.Withdrawal(nil), domain.ErrInvalidData)
+			},
+			wantErr:    true,
+			errType:    domain.ErrInvalidData,
+			wantAssert: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockStore := new(fakeStore)
+			tt.mockSetup(mockStore)
+			service := New(mockStore)
+
+			_, err := service.GetWithdrawals(tt.userID)
+
+			if tt.wantErr {
+				assert.ErrorIs(t, err, tt.errType)
+			} else {
+				assert.NoError(t, err)
+			}
+			if tt.wantAssert {
+				mockStore.AssertExpectations(t)
+			}
+		})
+	}
+}
+
 //GetStats() (*domain.Stat, error)
 //StartAccrualWorker(ctx context.Context, accrualIntervalSeconds int, workers int)
 //processAllPendingOrders(ctx context.Context, workers int)
