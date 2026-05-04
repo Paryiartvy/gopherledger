@@ -13,7 +13,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"gopherledger/internal/config"
 	"gopherledger/internal/handler"
 	"gopherledger/internal/router"
@@ -53,7 +52,7 @@ func main() {
 	h := handler.New(localService)
 	mux := router.New(h)
 
-	addr := fmt.Sprintf("%s:%d", config.GlobalConfig.Host, config.GlobalConfig.Port)
+	addr := "0.0.0.0:8080"
 	server := &http.Server{
 		Handler: mux,
 		Addr:    addr,
