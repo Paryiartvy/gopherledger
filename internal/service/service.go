@@ -12,6 +12,7 @@ import (
 	"gopherledger/internal/auth"
 	"log"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,6 +67,9 @@ func hash(item string) string {
 // RegisterUser регистрирует нового пользователя и возвращает токен аутентификации.
 // Хешируйте пароль перед сохранением с помощью crypto/sha256.
 func (s *Service) RegisterUser(login, password string) (string, error) {
+	if strings.TrimSpace(login) == "" || strings.TrimSpace(password) == "" {
+		return "", domain.ErrInvalidData
+	}
 	passwordHash := hash(password)
 
 	user, err := s.repo.CreateUser(login, passwordHash)

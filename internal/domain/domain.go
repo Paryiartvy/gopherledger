@@ -19,6 +19,7 @@ var (
 	ErrOrderOwnedByUser  = errors.New("заказ уже загружен этим пользователем")
 	ErrInsufficientFunds = errors.New("недостаточно баллов")
 	ErrInvalidOrder      = errors.New("неверный номер заказа")
+	ErrInvalidData       = errors.New("некорректный формат данных для регистрации")
 )
 
 // ---------------------------------------------------------------------------
