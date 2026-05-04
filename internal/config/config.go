@@ -25,8 +25,6 @@ var GlobalConfig *Config
 // Если файл не найден или поле не задано, применяются значения по умолчанию.
 func Load() (*Config, error) {
 	config := &Config{
-		Host:                   "localhost",
-		Port:                   8080,
 		LogLevel:               "info",
 		AccrualIntervalSeconds: 3,
 		Workers:                5,
