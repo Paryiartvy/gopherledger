@@ -169,6 +169,15 @@ func (s *Service) GetStats() (*domain.Stat, error) {
 // validateLuhn проверяет контрольную сумму номера заказа по алгоритму Луна.
 // Вызывается при загрузке заказа и при списании баллов.
 func validateLuhn(number string) bool {
+	if len(number) == 0 {
+		return false
+	}
+
+	for _, v := range number {
+		if v < '0' || v > '9' {
+			return false
+		}
+	}
 	sum := 0
 
 	for i, j := len(number)-1, 1; i >= 0; i, j = i-1, j+1 {
