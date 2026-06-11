@@ -191,3 +191,165 @@ func (p *PostgresRepo) GetOrdersForProcessing() ([]domain.Order, error) {
 	}
 	return orders, nil
 }
+
+func (p *PostgresRepo) UpdateOrderStatus(number, status string, accrual float64) error {
+	ctx, cancel := context.WithTimeout(context.Background(), p.ctxTimeout)
+	defer cancel()
+
+	query := `
+			SELECT user_id, status FROM orders
+			WHERE number = $1
+			FOR UPDATE
+	`
+	var userID int64
+	var currentStatus string
+
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("ошибка создания транзакции: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	err = tx.QueryRow(ctx, query, number).Scan(&userID, &currentStatus)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("заказ не найден: %w", err)
+	}
+	if err != nil {
+		return fmt.Errorf("ошибка бд при получении заказа: %w", err)
+	}
+
+	if currentStatus == domain.OrderStatusProcessed || currentStatus == domain.OrderStatusInvalid {
+		return nil
+	}
+
+	queryUpdateStatus := `
+					UPDATE orders
+					SET status = $1
+					WHERE number = $2
+		`
+	_, err = tx.Exec(ctx, queryUpdateStatus, status, number)
+	if err != nil {
+		return fmt.Errorf("ошибка обновления заказа: %w", err)
+	}
+
+	if accrual <= 0 {
+		err = tx.Commit(ctx)
+		if err != nil {
+			return fmt.Errorf("ошибка коммита транзакции: %w", err)
+		}
+		return nil
+	}
+
+	queryUpdateBalance := `
+					UPDATE balances
+					SET current = current + $1
+					WHERE user_id = $2
+		`
+
+	tag, err := tx.Exec(ctx, queryUpdateBalance, decimal.NewFromFloat(accrual), userID)
+	if err != nil {
+		return fmt.Errorf("ошибка обновления баланса: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return errors.New("ошибка обработки: не удалось обновить баланс")
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return fmt.Errorf("ошибка коммита транзакции: %w", err)
+	}
+	return nil
+}
+
+func (p *PostgresRepo) GetBalance(userID int64) (domain.Balance, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), p.ctxTimeout)
+	defer cancel()
+
+	query := `
+			SELECT current, withdrawn FROM balances
+			WHERE user_id = $1
+	`
+	var balance domain.Balance
+
+	err := p.pool.QueryRow(ctx, query, userID).Scan(&balance.Current, &balance.Withdrawn)
+	if err != nil {
+		return domain.Balance{}, fmt.Errorf("ошибка поиска баланса: %w", err)
+	}
+
+	return balance, nil
+}
+
+func (p *PostgresRepo) Withdraw(userID int64, orderNumber string, sum float64) error {
+	ctx, cancel := context.WithTimeout(context.Background(), p.ctxTimeout)
+	defer cancel()
+
+	query := `
+			UPDATE balances
+			SET current = current - $1, withdrawn = withdrawn + $1
+			WHERE user_id = $2 AND current >= $1
+	`
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("ошибка создания транзакции: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	decSum := decimal.NewFromFloat(sum)
+	tag, err := tx.Exec(ctx, query, decSum, userID)
+	if err != nil {
+		return fmt.Errorf("ошибка выполнения транзакции: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("ошибка при списании: %w", domain.ErrInsufficientFunds)
+	}
+
+	queryWithdrawal := `
+					INSERT INTO withdrawals(user_id, order_number, sum)
+					VALUES ($1, $2, $3)
+	`
+	tag, err = tx.Exec(ctx, queryWithdrawal, userID, orderNumber, decSum)
+	if err != nil {
+		return fmt.Errorf("ошибка выполнения транзакции: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return errors.New("ошибка выполнения транзакции: не удалось записать операцию")
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return fmt.Errorf("ошибка коммита транзакции: %w", err)
+	}
+	return nil
+}
+
+func (p *PostgresRepo) GetWithdrawals(userID int64) ([]domain.Withdrawal, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), p.ctxTimeout)
+	defer cancel()
+
+	query := `
+			SELECT id, user_id, order_number, sum, processed_at FROM withdrawals
+			WHERE user_id = $1
+			ORDER BY processed_at DESC
+	`
+	withdrawals := make([]domain.Withdrawal, 0)
+
+	rows, err := p.pool.Query(ctx, query, userID)
+	if err != nil {
+		return withdrawals, fmt.Errorf("ошибка поиска списаний: %w", err)
+	}
+	defer rows.Close()
+
+	var w domain.Withdrawal
+	for rows.Next() {
+		err = rows.Scan(&w.ID, &w.UserID, &w.OrderNumber, &w.Sum, &w.ProcessedAt)
+		if err != nil {
+			return make([]domain.Withdrawal, 0), fmt.Errorf("ошибка сканирования списаний: %w", err)
+		}
+		withdrawals = append(withdrawals, w)
+	}
+
+	if err := rows.Err(); err != nil {
+		return make([]domain.Withdrawal, 0), fmt.Errorf("ошибка при получении списаний: %w", err)
+	}
+	return withdrawals, nil
+}
