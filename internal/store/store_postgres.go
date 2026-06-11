@@ -232,7 +232,7 @@ func (p *PostgresRepo) UpdateOrderStatus(number, status string, accrual float64)
 		return fmt.Errorf("ошибка обновления заказа: %w", err)
 	}
 
-	if accrual <= 0 {
+	if status != domain.OrderStatusProcessed || accrual <= 0 {
 		err = tx.Commit(ctx)
 		if err != nil {
 			return fmt.Errorf("ошибка коммита транзакции: %w", err)
@@ -352,4 +352,73 @@ func (p *PostgresRepo) GetWithdrawals(userID int64) ([]domain.Withdrawal, error)
 		return make([]domain.Withdrawal, 0), fmt.Errorf("ошибка при получении списаний: %w", err)
 	}
 	return withdrawals, nil
+}
+
+func (p *PostgresRepo) GetStats() (*domain.Stat, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), p.ctxTimeout)
+	defer cancel()
+
+	stat := &domain.Stat{}
+	txOptions := pgx.TxOptions{
+		IsoLevel:       pgx.RepeatableRead,
+		AccessMode:     pgx.ReadOnly,
+		DeferrableMode: pgx.Deferrable,
+	}
+	tx, err := p.pool.BeginTx(ctx, txOptions)
+	if err != nil {
+		return stat, fmt.Errorf("ошибка создания транзакции: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	queryGetOrders := `SELECT 
+					COUNT(*) FILTER (WHERE status = $1),
+					COUNT(*) FILTER (WHERE status = $2),
+					COUNT(*) FILTER (WHERE status = $3),
+					COUNT(*) FILTER (WHERE status = $4),
+					COUNT(*),
+					COALESCE(sum(accrual), 0)
+					FROM orders
+	`
+	err = tx.QueryRow(
+		ctx,
+		queryGetOrders,
+		domain.OrderStatusNew,
+		domain.OrderStatusProcessing,
+		domain.OrderStatusProcessed,
+		domain.OrderStatusInvalid,
+	).Scan(
+		&stat.OrdersDistribution.NEW,
+		&stat.OrdersDistribution.PROCESSING,
+		&stat.OrdersDistribution.PROCESSED,
+		&stat.OrdersDistribution.INVALID,
+		&stat.OrdersCount,
+		&stat.TotalAccrual,
+	)
+	if err != nil {
+		return &domain.Stat{}, fmt.Errorf("ошибка выполнения транзакции: %w", err)
+	}
+
+	queryGetUsers := `SELECT 
+					(SELECT COUNT(*) FROM users),
+					COALESCE(SUM(sum), 0)
+					FROM withdrawals
+	`
+	err = tx.QueryRow(
+		ctx,
+		queryGetUsers,
+	).Scan(
+		&stat.UserCount,
+		&stat.TotalWithdraw,
+	)
+	if err != nil {
+		return &domain.Stat{}, fmt.Errorf("ошибка выполнения транзакции: %w", err)
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return &domain.Stat{}, fmt.Errorf("ошибка коммита транзакции: %w", err)
+	}
+
+	stat.GeneratedAt = time.Now()
+	return stat, nil
 }
