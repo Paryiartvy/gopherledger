@@ -122,7 +122,7 @@ func (p *PostgresRepo) CreateOrder(userID int64, number string) (*domain.Order, 
 		UserID:     userID,
 		Number:     number,
 		Status:     domain.OrderStatusNew,
-		Accrual:    decimal.Zero,
+		Accrual:    0,
 		UploadedAt: time.Now(),
 	}
 	return &order, nil
