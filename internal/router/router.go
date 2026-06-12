@@ -24,17 +24,18 @@ import (
 //	POST /api/user/balance/withdraw
 //	GET  /api/user/withdrawals
 //	POST /api/stats/export
-func New(h *handler.Handler) http.Handler {
+func New(h *handler.Handler, validator middleware.Validator) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/user/register", h.Register)
 	mux.HandleFunc("POST /api/user/login", h.Login)
 
-	mux.Handle("POST /api/user/orders", middleware.Auth(http.HandlerFunc(h.CreateOrder)))
-	mux.Handle("GET /api/user/orders", middleware.Auth(http.HandlerFunc(h.GetOrders)))
-	mux.Handle("GET /api/user/balance", middleware.Auth(http.HandlerFunc(h.GetBalance)))
-	mux.Handle("POST /api/user/balance/withdraw", middleware.Auth(http.HandlerFunc(h.Withdraw)))
-	mux.Handle("GET /api/user/withdrawals", middleware.Auth(http.HandlerFunc(h.GetWithdrawals)))
-	mux.Handle("POST /api/stats/export", middleware.Auth(http.HandlerFunc(h.ExportStats)))
+	authMiddleware := middleware.AuthMiddleware(validator)
+	mux.Handle("POST /api/user/orders", authMiddleware(http.HandlerFunc(h.CreateOrder)))
+	mux.Handle("GET /api/user/orders", authMiddleware(http.HandlerFunc(h.GetOrders)))
+	mux.Handle("GET /api/user/balance", authMiddleware(http.HandlerFunc(h.GetBalance)))
+	mux.Handle("POST /api/user/balance/withdraw", authMiddleware(http.HandlerFunc(h.Withdraw)))
+	mux.Handle("GET /api/user/withdrawals", authMiddleware(http.HandlerFunc(h.GetWithdrawals)))
+	mux.Handle("POST /api/stats/export", authMiddleware(http.HandlerFunc(h.ExportStats)))
 
 	return middleware.Logging(middleware.Recover(mux))
 }

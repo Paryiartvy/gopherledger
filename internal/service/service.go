@@ -6,9 +6,6 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
 	"gopherledger/internal/auth"
 	"log"
 	"math/rand"
@@ -32,6 +29,8 @@ type Repository interface {
 	Withdraw(userID int64, orderNumber string, sum float64) error
 	GetWithdrawals(userID int64) ([]domain.Withdrawal, error)
 	GetStats() (*domain.Stat, error)
+	SaveToken(userID int64, token string) error
+	GetUserByToken(token string) (int64, error)
 }
 
 // Service реализует бизнес-логику приложения.
@@ -57,12 +56,6 @@ func New(repo Repository) *Service {
 // ---------------------------------------------------------------------------
 // Методы бизнес-логики - реализуйте самостоятельно
 // ---------------------------------------------------------------------------
-func hash(item string) string {
-	h := sha256.New()
-	h.Write([]byte(item))
-	hashBytes := h.Sum(nil)
-	return hex.EncodeToString(hashBytes)
-}
 
 // RegisterUser регистрирует нового пользователя и возвращает токен аутентификации.
 // Хешируйте пароль перед сохранением с помощью crypto/sha256.
@@ -70,7 +63,7 @@ func (s *Service) RegisterUser(login, password string) (string, error) {
 	if strings.TrimSpace(login) == "" || strings.TrimSpace(password) == "" {
 		return "", domain.ErrInvalidData
 	}
-	passwordHash := hash(password)
+	passwordHash := auth.Hash(password)
 
 	user, err := s.repo.CreateUser(login, passwordHash)
 
@@ -78,9 +71,10 @@ func (s *Service) RegisterUser(login, password string) (string, error) {
 		return "", err
 	}
 
-	token, err := auth.GenerateToken(user.ID)
+	token := auth.GenerateToken()
+	err = s.repo.SaveToken(user.ID, token)
 	if err != nil {
-		return "", fmt.Errorf("ошибка генерации токена при регистрации: %w", err)
+		return "", err
 	}
 	return token, nil
 }
@@ -91,11 +85,12 @@ func (s *Service) LoginUser(login, password string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	passwordHash := hash(password)
+	passwordHash := auth.Hash(password)
 	if passwordHash == user.PasswordHash {
-		token, err := auth.GenerateToken(user.ID)
+		token := auth.GenerateToken()
+		err = s.repo.SaveToken(user.ID, token)
 		if err != nil {
-			return "", fmt.Errorf("ошибка генерации токена при аутентификации: %w", err)
+			return "", err
 		}
 		return token, nil
 	}
@@ -164,6 +159,11 @@ func (s *Service) GetStats() (*domain.Stat, error) {
 		return stat, err
 	}
 	return stat, nil
+}
+
+// ValidateToken проверяет переданный токен и возвращает id и ошибку
+func (s *Service) ValidateToken(token string) (int64, error) {
+	return s.repo.GetUserByToken(token)
 }
 
 // validateLuhn проверяет контрольную сумму номера заказа по алгоритму Луна.

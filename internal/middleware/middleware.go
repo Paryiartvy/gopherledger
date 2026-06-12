@@ -4,13 +4,16 @@ package middleware
 
 import (
 	"context"
-	"gopherledger/internal/auth"
 	"gopherledger/internal/config"
 	"gopherledger/internal/handler"
 	"log"
 	"net/http"
 	"time"
 )
+
+type Validator interface {
+	ValidateToken(token string) (int64, error)
+}
 
 // Auth проверяет токен из заголовка Authorization и помещает ID пользователя в контекст.
 // Запросы без валидного токена получают ответ 401 Unauthorized.
@@ -20,17 +23,19 @@ import (
 //   - проверить токен через пакет auth
 //   - поместить ID пользователя в контекст запроса
 //   - передать управление следующему handler или вернуть 401
-func Auth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := r.Header.Get("Authorization")
-		id, err := auth.ValidateToken(token)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			return
-		}
-		ctx := context.WithValue(r.Context(), handler.CtxKeyUserID, id)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+func AuthMiddleware(validator Validator) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			token := r.Header.Get("Authorization")
+			id, err := validator.ValidateToken(token)
+			if err != nil {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			ctx := context.WithValue(r.Context(), handler.CtxKeyUserID, id)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }
 
 // statusRecorder оборачивает http.ResponseWriter для перехвата статус-кода.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gopherledger/internal/auth"
 	"gopherledger/internal/domain"
 	"time"
 
@@ -86,6 +87,43 @@ func (p *PostgresRepo) GetUserByLogin(login string) (*domain.User, error) {
 	}
 
 	return user, nil
+}
+
+func (p *PostgresRepo) SaveToken(userID int64, token string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), p.ctxTimeout)
+	defer cancel()
+
+	query := `
+			INSERT INTO auth(user_id, token)
+			VALUES($1, $2)
+			ON CONFLICT (user_id) DO UPDATE
+			SET token = EXCLUDED.token
+	`
+
+	_, err := p.pool.Exec(ctx, query, userID, token)
+	if err != nil {
+		return fmt.Errorf("ошибка сохранения токена: %w", err)
+	}
+	return nil
+}
+
+func (p *PostgresRepo) GetUserByToken(token string) (int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), p.ctxTimeout)
+	defer cancel()
+
+	query := `
+			SELECT user_id FROM auth
+			WHERE token = $1
+	`
+	var id int64
+	err := p.pool.QueryRow(ctx, query, token).Scan(&id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, auth.ErrInvalidToken
+		}
+		return 0, fmt.Errorf("ошибка получения ID по токену: %w", err)
+	}
+	return id, nil
 }
 
 func (p *PostgresRepo) CreateOrder(userID int64, number string) (*domain.Order, error) {

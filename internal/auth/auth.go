@@ -8,46 +8,27 @@
 package auth
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
-	"sync"
 
 	"github.com/google/uuid"
 )
-
-var mu = sync.RWMutex{}
-var userIDByToken = make(map[string]int64)
-var tokenByUserID = make(map[int64]string)
 
 // ErrInvalidToken возвращается, если токен не найден или недействителен.
 var ErrInvalidToken = errors.New("недействительный токен")
 
 // GenerateToken создаёт новый токен для пользователя с указанным ID
 // и сохраняет связь токен -> userID внутри пакета.
-func GenerateToken(userID int64) (string, error) {
+func GenerateToken() string {
 	token := uuid.New().String()
 
-	mu.Lock()
-	defer mu.Unlock()
-	userIDByToken[token] = userID
-	delete(userIDByToken, tokenByUserID[userID])
-	tokenByUserID[userID] = token
-
-	return token, nil
+	return token
 }
 
-// ValidateToken проверяет токен и возвращает ID пользователя.
-// Возвращает ErrInvalidToken если токен не найден.
-func ValidateToken(token string) (int64, error) {
-	mu.RLock()
-	defer mu.RUnlock()
-
-	id, ok := userIDByToken[token]
-	if !ok {
-		return 0, ErrInvalidToken
-	}
-	if t, ok := tokenByUserID[id]; ok && t != token {
-		return 0, ErrInvalidToken
-	}
-
-	return id, nil
+func Hash(item string) string {
+	h := sha256.New()
+	h.Write([]byte(item))
+	hashBytes := h.Sum(nil)
+	return hex.EncodeToString(hashBytes)
 }

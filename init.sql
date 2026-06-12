@@ -1,5 +1,5 @@
 CREATE TABLE users (
-    id BIGSERIAL PRIMARY KEY,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     login TEXT UNIQUE,
     password_hash TEXT NOT NULL
 );
@@ -16,7 +16,7 @@ CREATE TABLE balances (
 );
 
 CREATE TABLE orders (
-    id BIGSERIAL PRIMARY KEY,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id BIGINT REFERENCES users(id) ON DELETE RESTRICT,
     number TEXT NOT NULL UNIQUE,
     status TEXT NOT NULL,
@@ -30,11 +30,11 @@ CREATE INDEX idx_orders_unprocessed ON orders(status)
 WHERE status IN('NEW', 'PROCESSING');
 
 CREATE TABLE withdrawals (
-     id BIGSERIAL PRIMARY KEY,
-     user_id BIGINT REFERENCES users(id) ON DELETE RESTRICT,
-     order_number TEXT NOT NULL UNIQUE,
-     sum NUMERIC(13,3) NOT NULL DEFAULT 0.000,
-     processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id BIGINT REFERENCES users(id) ON DELETE RESTRICT,
+    order_number TEXT NOT NULL UNIQUE,
+    sum NUMERIC(13,3) NOT NULL DEFAULT 0.000,
+    processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_withdrawals_user_data ON withdrawals(user_id, processed_at DESC);

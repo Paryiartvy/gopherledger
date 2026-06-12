@@ -72,7 +72,7 @@ func main() {
 	}()
 
 	h := handler.New(localService)
-	mux := router.New(h)
+	mux := router.New(h, localService)
 
 	addr := "0.0.0.0:8080"
 	server := &http.Server{
