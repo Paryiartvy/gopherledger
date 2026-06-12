@@ -5,6 +5,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -12,11 +13,13 @@ import (
 // Config содержит параметры запуска сервера.
 // Изучите config.yaml и добавьте поля самостоятельно.
 type Config struct {
-	Host                   string `yaml:"server_host"`
-	Port                   int    `yaml:"server_port"`
-	LogLevel               string `yaml:"log_level"`
-	AccrualIntervalSeconds int    `yaml:"accrual_interval_seconds"`
-	Workers                int    `yaml:"worker_concurrency"`
+	Host                   string        `yaml:"server_host"`
+	Port                   int           `yaml:"server_port"`
+	LogLevel               string        `yaml:"log_level"`
+	AccrualIntervalSeconds int           `yaml:"accrual_interval_seconds"`
+	Workers                int           `yaml:"worker_concurrency"`
+	DatabaseTimeout        time.Duration `yaml:"database_timeout"`
+	DatabaseURI            string        `yaml:"database_uri"`
 }
 
 var GlobalConfig *Config
@@ -28,6 +31,8 @@ func Load() (*Config, error) {
 		LogLevel:               "info",
 		AccrualIntervalSeconds: 3,
 		Workers:                5,
+		DatabaseTimeout:        5 * time.Second,
+		DatabaseURI:            "postgres://user:password@localhost:5432/gopherledger?sslmode=disable",
 	}
 
 	data, err := os.ReadFile("./config.yaml")

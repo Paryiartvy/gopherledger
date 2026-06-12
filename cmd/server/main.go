@@ -25,6 +25,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -34,9 +36,29 @@ func main() {
 	}
 	config.GlobalConfig = cfg
 
-	localStore := store.New()
-	localService := service.New(localStore)
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	poolConfig, err := pgxpool.ParseConfig(config.GlobalConfig.DatabaseURI)
+	if err != nil {
+		log.Fatalf("ошибка конфигурации бд: %v", err)
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	if err != nil {
+		log.Fatalf("Unable to create connection pool: %v", err)
+	}
+	defer pool.Close()
+
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer pingCancel()
+	if err := pool.Ping(pingCtx); err != nil {
+		log.Fatalf("бд не отвечает после запуска: %v", err)
+	}
+
+	log.Print("успешное подключение к бд!")
+
+	localStore := store.New(pool, config.GlobalConfig.DatabaseTimeout)
+	localService := service.New(localStore)
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -73,13 +95,13 @@ func main() {
 	<-sigChan
 	log.Println("Starting graceful shutdown...")
 
-	cancel()
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 
 	if err = server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("Server shutdown error: %v", err)
 	}
+	cancel()
 
 	wg.Wait()
 
