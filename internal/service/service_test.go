@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"gopherledger/internal/auth"
 	"gopherledger/internal/domain"
 	"os"
 	"testing"
@@ -23,6 +24,15 @@ func (s *fakeStore) CreateUser(login, passwordHash string) (*domain.User, error)
 func (s *fakeStore) GetUserByLogin(login string) (*domain.User, error) {
 	args := s.Called(login)
 	return args.Get(0).(*domain.User), args.Error(1)
+}
+func (s *fakeStore) SaveToken(userID int64, token string) error {
+	args := s.Called(userID, token)
+	return args.Error(0)
+}
+
+func (s *fakeStore) GetUserByToken(token string) (int64, error) {
+	args := s.Called(token)
+	return args.Get(0).(int64), args.Error(1)
 }
 func (s *fakeStore) CreateOrder(userID int64, number string) (*domain.Order, error) {
 	args := s.Called(userID, number)
@@ -75,6 +85,7 @@ func TestRegisterUser(t *testing.T) {
 					Login:        "test123",
 					PasswordHash: "reallyStrongPassword",
 				}, nil)
+				s.On("SaveToken", int64(67), mock.AnythingOfType("string")).Return(nil)
 			},
 			wantErr: false,
 			errType: nil,
@@ -127,8 +138,9 @@ func TestLoginUser(t *testing.T) {
 				s.On("GetUserByLogin", "test123").Return(&domain.User{
 					ID:           67,
 					Login:        "test123",
-					PasswordHash: hash("qwerty"),
+					PasswordHash: auth.Hash("qwerty"),
 				}, nil)
+				s.On("SaveToken", int64(67), mock.AnythingOfType("string")).Return(nil)
 			},
 			wantErr: false,
 			errType: nil,
