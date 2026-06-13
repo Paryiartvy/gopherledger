@@ -64,7 +64,11 @@ func Logging(next http.Handler) http.Handler {
 		next.ServeHTTP(&responseWithStatus, r)
 		switch config.GlobalConfig.LogLevel {
 		case "debug":
-			log.Printf("<= %s %s %d %v: %s %s", r.Method, r.URL.Path, responseWithStatus.status, time.Since(start), r.RemoteAddr, r.Host)
+			clientIP := r.Header.Get("X-Real-IP")
+			if clientIP == "" {
+				clientIP = r.RemoteAddr
+			}
+			log.Printf("<= %s %s %d %v: %s %s", r.Method, r.URL.Path, responseWithStatus.status, time.Since(start), clientIP, r.Host)
 		default:
 			log.Printf("<= %s %s %d %v", r.Method, r.URL.Path, responseWithStatus.status, time.Since(start))
 		}
