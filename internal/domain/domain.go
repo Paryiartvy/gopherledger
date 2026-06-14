@@ -19,6 +19,7 @@ var (
 	ErrOrderOwnedByUser  = errors.New("заказ уже загружен этим пользователем")
 	ErrInsufficientFunds = errors.New("недостаточно баллов")
 	ErrInvalidOrder      = errors.New("неверный номер заказа")
+	ErrInvalidData       = errors.New("некорректный формат данных для регистрации")
 )
 
 // ---------------------------------------------------------------------------
@@ -34,27 +35,42 @@ type User struct {
 
 // Order представляет заказ, загруженный пользователем.
 type Order struct {
-	ID         int64
-	UserID     int64
-	Number     string
-	Status     string
-	Accrual    float64
-	UploadedAt time.Time
+	ID         int64     `json:"-"`
+	UserID     int64     `json:"-"`
+	Number     string    `json:"number"`
+	Status     string    `json:"status"`
+	Accrual    float64   `json:"accrual,omitempty"`
+	UploadedAt time.Time `json:"uploaded_at"`
 }
 
 // Balance представляет текущий баланс пользователя.
 type Balance struct {
-	Current   float64
-	Withdrawn float64
+	Current   float64 `json:"current"`
+	Withdrawn float64 `json:"withdrawn"`
 }
 
 // Withdrawal представляет операцию списания баллов.
 type Withdrawal struct {
-	ID          int64
-	UserID      int64
-	OrderNumber string
-	Sum         float64
-	ProcessedAt time.Time
+	ID          int64     `json:"-"`
+	UserID      int64     `json:"-"`
+	OrderNumber string    `json:"order"`
+	Sum         float64   `json:"sum"`
+	ProcessedAt time.Time `json:"processed_at,omitempty"`
+}
+
+type ordersDistribution struct {
+	NEW        int `json:"new"`
+	PROCESSING int `json:"processing"`
+	INVALID    int `json:"invalid"`
+	PROCESSED  int `json:"processed"`
+}
+type Stat struct {
+	UserCount          int                `json:"user_count"`
+	OrdersCount        int                `json:"orders_count"`
+	OrdersDistribution ordersDistribution `json:"orders_distribution"`
+	TotalAccrual       float64            `json:"total_accrual"`
+	TotalWithdraw      float64            `json:"total_withdraw"`
+	GeneratedAt        time.Time          `json:"generated_at"`
 }
 
 // ---------------------------------------------------------------------------

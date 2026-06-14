@@ -7,19 +7,28 @@
 // Реализуйте этот пакет самостоятельно.
 package auth
 
-import "errors"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+
+	"github.com/google/uuid"
+)
 
 // ErrInvalidToken возвращается, если токен не найден или недействителен.
 var ErrInvalidToken = errors.New("недействительный токен")
 
 // GenerateToken создаёт новый токен для пользователя с указанным ID
 // и сохраняет связь токен -> userID внутри пакета.
-func GenerateToken(userID int64) (string, error) {
-	panic("не реализовано")
+func GenerateToken() string {
+	token := uuid.New().String()
+
+	return token
 }
 
-// ValidateToken проверяет токен и возвращает ID пользователя.
-// Возвращает ErrInvalidToken если токен не найден.
-func ValidateToken(token string) (int64, error) {
-	panic("не реализовано")
+func Hash(item string) string {
+	h := sha256.New()
+	h.Write([]byte(item))
+	hashBytes := h.Sum(nil)
+	return hex.EncodeToString(hashBytes)
 }

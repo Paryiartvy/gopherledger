@@ -1,4 +1,4 @@
-server_host: "localhost"
+server_host: ""
 server_port: 8080
 log_level: "info"
 accrual_interval_seconds: 3
